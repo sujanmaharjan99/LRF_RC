@@ -1,3 +1,4 @@
+import argparse
 import asyncio
 import aiohttp
 import os
@@ -17,9 +18,27 @@ output_directory = "/media/12TB/Sujan/NWM/output1"
  
 # Set of feature_ids to extract
 feature_ids_set = {880478,2252949,3624735,3702540,4388401,4391417,5089904,5092616,5166621,6010106,6013072}
-  # Keep the set as it is
+
 # List to track incomplete dates
 incomplete_dates = []
+
+def parse_args():
+    """Parse command-line arguments for start date, end date and ensemble members."""
+    parser = argparse.ArgumentParser(
+        description="Download and process National Water Model long-range ensembles."
+    )
+    parser.add_argument(
+        "--start", required=True, help="Start date in YYYYMMDD format"
+    )
+    parser.add_argument(
+        "--end", required=True, help="End date in YYYYMMDD format"
+    )
+    parser.add_argument(
+        "--ensemble",
+        default="all",
+        help="Comma-separated ensemble members to download (mem1, mem2, mem3, mem4) or 'all'"
+    )
+    return parser.parse_args()
 
 async def async_download_file(session, blob, destination_folder, retries=3, delay=5):
     """Downloads a file asynchronously with retry logic."""
@@ -59,33 +78,58 @@ async def download_gcs_folder(bucket_name, folder_path, destination_folder, max_
     
     return len(blobs)
 
- # Get user input for date range
-start_date_str = input("Enter start date (YYYYMMDD): ")
-end_date_str = input("Enter end date (YYYYMMDD): ")
-
-try:
-    start_date = datetime.strptime(start_date_str, "%Y%m%d")
-    end_date = datetime.strptime(end_date_str, "%Y%m%d")
+def main():
+    args = parse_args()
+    try:
+        start_date = datetime.strptime(args.start, "%Y%m%d")
+        end_date = datetime.strptime(args.end, "%Y%m%d")
+    except ValueError:
+        print("Invalid date format. Use YYYYMMDD.")
+        return
 
     if start_date > end_date:
-        print("Error: Start date must be before end date.")
+        print("Start date must not exceed end date.")
+        return
+
+    # Determine ensembles to download
+    valid = {'mem1', 'mem2', 'mem3', 'mem4'}
+    if args.ensemble.lower() == "all":
+        ensembles = sorted(valid)
     else:
-        bucket_name = "national-water-model"
+        ensembles = [e.strip().lower() for e in args.ensemble.split(',') if e.strip()]
+        if not ensembles or any(e not in valid for e in ensembles):
+            print(f"Invalid ensemble selection. Choose from {', '.join(sorted(valid))} or 'all'.")
+            return
 
-        while start_date <= end_date:
-            folder_path = f"nwm.{start_date.strftime('%Y%m%d')}/long_range_mem3/"
-            destination_folder = f"{input_directory}/{start_date.strftime('%Y%m%d')}/long_range_mem3"
+    bucket_name = "national-water-model"
+    incomplete_by_ensemble = {e: [] for e in ensembles}
 
-            print(f"Downloading {start_date.strftime('%Y-%m-%d')}...")
-            loop = asyncio.get_event_loop()
-            file_count = loop.run_until_complete(download_gcs_folder(bucket_name, folder_path, destination_folder))
+    # Loop over dates and ensembles
+    date = start_date
+    while date <= end_date:
+        date_str = date.strftime("%Y%m%d")
+        print(f"Processing {date.strftime('%Y-%m-%d')}...")
+        for ensemble in ensembles:
+            folder_path = f"nwm.{date_str}/long_range_{ensemble}/"
+            dest_folder = f"{input_directory}/{date_str}/long_range_{ensemble}"
+            print(f"  Downloading {ensemble}…")
+            file_count = asyncio.run(
+                download_gcs_folder(bucket_name, folder_path, dest_folder)
+            )
+            if file_count < 480:
+                incomplete_by_ensemble[ensemble].append(date.strftime("%Y-%m-%d"))
+            else:
+                process_netcdf_files(dest_folder)
+                # Optionally remove raw .nc files
+                # os.system(f"rm -rf {dest_folder}")
+        date += timedelta(days=1)
 
-            start_date += timedelta(days=1)
-
-        if incomplete_dates:
-            print("Incomplete dates (missing files):", incomplete_dates)
+    # Summary
+    for ensemble, missing_dates in incomplete_by_ensemble.items():
+        if missing_dates:
+            print(f"Incomplete dates for {ensemble}: {missing_dates}")
         else:
-            print("All dates processed successfully.")
+            print(f"All dates for {ensemble} processed successfully.")
 
-except ValueError:
-    print("Error: Invalid date format. Use YYYYMMDD.")
+if __name__ == "__main__":
+    main()
