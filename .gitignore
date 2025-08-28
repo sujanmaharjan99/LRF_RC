@@ -1,1 +1,4 @@
 steady-library-470316-r2-5ea9851180c5.json
+*.json
+*.env
+credentials/
