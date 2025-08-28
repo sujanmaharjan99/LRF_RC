@@ -9,7 +9,7 @@ from google.cloud import storage
 from datetime import datetime, timedelta
 from concurrent.futures import ProcessPoolExecutor
 
-os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = "/media/12TB/Sujan/NWM/Codes/LRF_RC/steady-library-470316-r2-5ea9851180c5.json"
+os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = "/media/12TB/Sujan/NWM/Codes/Key/steady-library-470316-r2-5ea9851180c5.json"
 
 # Define directories
 input_directory = "/media/12TB/Sujan/NWM/Data"
