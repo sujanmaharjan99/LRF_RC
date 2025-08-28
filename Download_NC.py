@@ -116,12 +116,7 @@ def main():
             file_count = asyncio.run(
                 download_gcs_folder(bucket_name, folder_path, dest_folder)
             )
-            if file_count < 480:
-                incomplete_by_ensemble[ensemble].append(date.strftime("%Y-%m-%d"))
-            else:
-                process_netcdf_files(dest_folder)
-                # Optionally remove raw .nc files
-                # os.system(f"rm -rf {dest_folder}")
+
         date += timedelta(days=1)
 
     # Summary
