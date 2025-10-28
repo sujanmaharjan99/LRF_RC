@@ -9,12 +9,7 @@ Usage:
 import sys
 import numpy as np
 from datetime import datetime, timezone
-
-try:
-    import xarray as xr
-except ImportError:
-    print("Please install xarray: pip install xarray netCDF4")
-    sys.exit(1)
+import xarray as xr
 
 def classify_var(vname, var):
     name = vname.lower()
