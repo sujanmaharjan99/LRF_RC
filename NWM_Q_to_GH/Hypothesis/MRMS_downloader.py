@@ -19,6 +19,13 @@ import multiprocessing
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s: %(message)s")
 
+from pathlib import Path
+
+HERE = Path(__file__).resolve().parent
+RAW_DIR = HERE / "mrms_raw"
+OUT_MRMS = HERE / "out_mrms"
+OUT_MRMS.mkdir(exist_ok=True)
+RAW_DIR.mkdir(exist_ok=True)
 
 # ----------------------------------------------------------------------
 # Basin helpers (Upper Mississippi = HUC2 07, Missouri = HUC2 10)
@@ -52,12 +59,12 @@ def build_basins() -> gpd.GeoDataFrame:
     using your WBD GPKGs.
     """
     upper_miss = load_basin_from_gpkg(
-        "./Checker/WBD_07_HU2_GPKG.gpkg",
+        HERE / "Checker/" / "WBD_07_HU2_GPKG.gpkg",
         huc2_code="07",
     )
 
     missouri = load_basin_from_gpkg(
-        "./Checker/WBD_10_HU2_GPKG.gpkg",
+        HERE / "Checker/" / "WBD_10_HU2_GPKG.gpkg",
         huc2_code="10",
     )
 
@@ -184,19 +191,17 @@ def main():
 
     usage = "python %prog -p <path> -o <outdir> -s <start> -e <end>"
     p = optparse.OptionParser(usage=usage)
-    p.add_option("--path", "-p", help="Path to input GRIB files directory.")
-    p.add_option("--outdir", "-o", help="Path to output directory for CSV.")
     p.add_option("--start", "-s", help="Start date in format YYYY,MM,DD,HH")
     p.add_option("--end", "-e", help="End date in format YYYY,MM,DD,HH")
 
     options, arguments = p.parse_args()
 
-    if None in [options.path, options.outdir, options.start, options.end]:
+    if options.start is None or options.end is None:
         p.print_help()
         return
 
-    path = options.path
-    outdir = options.outdir
+    path = RAW_DIR
+    outdir = OUT_MRMS
     start_components = [int(x) for x in options.start.split(",")]
     end_components = [int(x) for x in options.end.split(",")]
     start_date = datetime(*start_components)
@@ -317,48 +322,41 @@ def main():
     # pivot so each basin is a column, one row per time
     df_wide = df6.pivot(index="time", columns="basin", values="precip_mm_6h").reset_index()
 
-    # nice time string
+    # nice time string, e.g. 2018103000
+    df_wide = df_wide.sort_values("time")
     df_wide["time_str"] = df_wide["time"].dt.strftime("%Y%m%d%H")
 
     # lead time in hours since first 6-hour period
-    df_wide = df_wide.sort_values("time")
     df_wide["lead_h"] = (
         (df_wide["time"] - df_wide["time"].min())
         .dt.total_seconds() // 3600
     )
 
-    # reorder and rename columns a bit
+    # rename basin columns
     col_map = {
         "HUC2_07_UpperMiss": "precip_mm_6h_HUC2_07_UpperMiss",
         "HUC2_10_Missouri": "precip_mm_6h_HUC2_10_Missouri",
     }
     df_wide = df_wide.rename(columns=col_map)
 
+    # pick output columns and write CSV
     out_cols = ["time_str", "lead_h"] + list(col_map.values())
-    out_csv = os.path.join(outdir, "mrms_6h_basin_precip_wide.csv")
+    out_csv = OUT_MRMS / "mrms_6h_basin_precip_wide.csv"
     df_wide[out_cols].to_csv(out_csv, index=False)
 
     elapsed = time.time() - start_time
     logging.info(f"Wrote {out_csv}")
-    logging.info(f"Total execution time: {elapsed:.2f} seconds")
+    logging.info(f"Total execution time so far: {elapsed:.2f} seconds")
+    
+    for f in hourly_fnames:
+        if os.path.exists(f):
+            try: os.remove(f)
+            except: pass
 
-    # tidy time label like 2018103000
-    df6["time_str"] = df6["time"].dt.strftime("%Y%m%d%H")
-
-    # optional: if you want an explicit "lead_h" relative to the first 6h step
-    df6 = df6.sort_values(["basin", "time"])
-    df6["lead_h"] = (
-        df6.groupby("basin")["time"]
-           .transform(lambda s: (s - s.iloc[0]).dt.total_seconds() // 3600)
-    )
-
-    # keep what you care about
-    out_csv = os.path.join(outdir, "mrms_6h_basin_precip.csv")
-    df6[["time_str", "basin", "lead_h", "precip_mm_6h"]].to_csv(out_csv, index=False)
-
-    elapsed = time.time() - start_time
-    logging.info(f"Wrote {out_csv}")
-    logging.info(f"Total execution time: {elapsed:.2f} seconds")
+    for f in cropped_files:
+        if f is not None and os.path.exists(f):
+            try: os.remove(f)
+            except: pass
 
 
 if __name__ == "__main__":
