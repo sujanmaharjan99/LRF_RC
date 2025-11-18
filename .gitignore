@@ -4,3 +4,4 @@ steady-library-470316-r2-5ea9851180c5.json
 credentials/
 general_venv/
 *.gpkg
+*.csv
