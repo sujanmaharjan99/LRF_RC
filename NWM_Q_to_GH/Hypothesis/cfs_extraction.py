@@ -35,8 +35,8 @@ os.environ["GRIB_LOG_LEVEL"] = "error"   # safe no-op if unsupported
 # ------------------------
 # User inputs
 # ------------------------
-START_DATE = "2018-11-30"          # inclusive, UTC calendar date
-END_DATE   = "2018-12-31"          # inclusive, UTC calendar date
+START_DATE = "2019-02-01"          # inclusive, UTC calendar date
+END_DATE   = "2019-03-31"          # inclusive, UTC calendar date
 CYCLES     = ("00","06","12","18") # which cycles to scan
 MEMBERS    = (1,2,3,4)             # 1..4
 OUT_ROOT   = Path("out_cfs_lead_ts")

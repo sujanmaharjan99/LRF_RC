@@ -6,3 +6,5 @@ general_venv/
 *.gpkg
 *.csv
 *.grib2
+:memory:
+run.log
