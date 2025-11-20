@@ -284,21 +284,30 @@ def main():
     ]
 
     logging.info("Starting cropping...")
-    crop_tasks = [(f, bbox_raster_crs, path) for f in hourly_fnames]
-    with concurrent.futures.ProcessPoolExecutor(max_workers=8) as executor:
-        cropped_files = list(executor.map(crop_raster, crop_tasks))
-
-    # 6) zonal stats: basin-mean hourly precip
-    logging.info("Starting zonal statistics...")
-    zonal_tasks = [
-        (cf, basin_shapes, ts.to_pydatetime())
-        for cf, ts in zip(cropped_files, tseq_hourly)
-    ]
-
     all_rows = []
-    with concurrent.futures.ProcessPoolExecutor(max_workers=8) as executor:
-        for rows in executor.map(compute_zonal_stats, zonal_tasks):
-            all_rows.extend(rows)
+
+    for grib_file, valid_time in zip(hourly_fnames, tseq_hourly):
+
+        # skip hours that never downloaded
+        if not os.path.exists(grib_file):
+            continue
+
+        # Crop this one file
+        cropped = crop_raster((grib_file, bbox_raster_crs, path))
+
+        # Compute zonal stats for *this* hour
+        rows = compute_zonal_stats((cropped, basin_shapes, valid_time.to_pydatetime()))
+        all_rows.extend(rows)
+
+        # DELETE raw and cropped files immediately
+        try:
+            if os.path.exists(grib_file):
+                os.remove(grib_file)
+            if cropped and os.path.exists(cropped):
+                os.remove(cropped)
+        except Exception:
+            pass
+
 
     if not all_rows:
         logging.warning("No zonal stats produced. Exiting.")
