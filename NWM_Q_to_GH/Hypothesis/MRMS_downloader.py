@@ -343,7 +343,7 @@ def main():
     df_wide = df_wide.rename(columns=col_map)
 
     # pick output columns and write CSV
-    out_cols = ["time_str", "lead_h"] + list(col_map.values())
+    out_cols = ["time_str"] + list(col_map.values())
     out_csv = OUT_MRMS / "mrms_6h_basin_precip_wide.csv"
     df_wide[out_cols].to_csv(out_csv, index=False)
 
