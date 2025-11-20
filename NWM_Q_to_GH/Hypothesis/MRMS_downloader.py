@@ -335,12 +335,6 @@ def main():
     df_wide = df_wide.sort_values("time")
     df_wide["time_str"] = df_wide["time"].dt.strftime("%Y%m%d%H")
 
-    # lead time in hours since first 6-hour period
-    df_wide["lead_h"] = (
-        (df_wide["time"] - df_wide["time"].min())
-        .dt.total_seconds() // 3600
-    )
-
     # rename basin columns
     col_map = {
         "HUC2_07_UpperMiss": "precip_mm_6h_HUC2_07_UpperMiss",
