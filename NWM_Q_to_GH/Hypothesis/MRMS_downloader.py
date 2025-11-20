@@ -357,17 +357,6 @@ def main():
     logging.info(f"Wrote {out_csv}")
     logging.info(f"Total execution time so far: {elapsed:.2f} seconds")
     
-    for f in hourly_fnames:
-        if os.path.exists(f):
-            try: os.remove(f)
-            except: pass
-
-    for f in cropped_files:
-        if f is not None and os.path.exists(f):
-            try: os.remove(f)
-            except: pass
-
-
 if __name__ == "__main__":
     multiprocessing.set_start_method("spawn")
     main()
