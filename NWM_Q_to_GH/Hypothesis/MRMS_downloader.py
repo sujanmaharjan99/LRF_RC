@@ -345,7 +345,16 @@ def main():
     # pick output columns and write CSV
     out_cols = ["time_str"] + list(col_map.values())
     out_csv = OUT_MRMS / "mrms_6h_basin_precip_wide.csv"
-    df_wide[out_cols].to_csv(out_csv, index=False)
+
+    # choose columns we want in the file
+    out_df = df_wide[out_cols]
+
+    if out_csv.exists():
+        # append without header
+        out_df.to_csv(out_csv, mode="a", header=False, index=False)
+    else:
+        # first time: write with header
+        out_df.to_csv(out_csv, index=False)
 
     elapsed = time.time() - start_time
     logging.info(f"Wrote {out_csv}")
