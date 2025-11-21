@@ -35,7 +35,7 @@ os.environ["GRIB_LOG_LEVEL"] = "error"   # safe no-op if unsupported
 # ------------------------
 # User inputs
 # ------------------------
-START_DATE = "2019-01-01"          # inclusive, UTC calendar date
+START_DATE = "2019-02-24"          # inclusive, UTC calendar date
 END_DATE   = "2019-03-31"          # inclusive, UTC calendar date
 CYCLES     = ("00","06","12","18") # which cycles to scan
 MEMBERS    = (1,2,3,4)             # 1..4

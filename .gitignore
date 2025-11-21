@@ -5,6 +5,6 @@ credentials/
 general_venv/
 *.gpkg
 *.csv
-*.grib2
+*.gri*
 :memory:
 run.log
