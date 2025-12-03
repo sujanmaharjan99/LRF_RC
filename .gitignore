@@ -8,3 +8,4 @@ general_venv/
 *.gri*
 :memory:
 run.log
+**/.ipynb_checkpoints/
