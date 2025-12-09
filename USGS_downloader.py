@@ -8,10 +8,13 @@ import sys
 
 import pandas as pd
 import dataretrieval.nwis as nwis
-
+VELOCITY_MPS_TO_FPS = 3.280839895013123  # 1 m = 3.2808 ft
 FT_TO_M = 0.3048
 CFS_TO_CUMECS = 0.028316846592
 TS_FMT = "%Y-%m-%d %H:%M:%S"
+
+VELOCITY_PARAMS_MPS = {"81380"}  # discharge velocity, m/s
+DISCHARGE_PARAMS_CFS = {"00060", "00061"}  # extend if needed
 
 def slugify_name(name: str) -> str:
     if not name:
@@ -124,23 +127,39 @@ def main():
             continue
 
         # Build rows at native resolution
+                # Build rows at native resolution
         rows = []
         idx = df_local.index
         for ts in idx:
             discharge_cfs = None
+            discharge_cumecs = None
             stage_val = None
+            stage_ft = stage_m = None
+            velocity_mps = velocity_fps = None
 
+            # Main parameter value
             if q_col is not None:
                 val = df_local.at[ts, q_col]
                 if pd.notna(val):
-                    discharge_cfs = float(val)
+                    val = float(val)
+                    if args.parameter in DISCHARGE_PARAMS_CFS:
+                        # Discharge in cfs
+                        discharge_cfs = val
+                        discharge_cumecs = discharge_cfs * CFS_TO_CUMECS
+                    elif args.parameter in VELOCITY_PARAMS_MPS:
+                        # Velocity in m/s
+                        velocity_mps = val
+                        velocity_fps = val * VELOCITY_MPS_TO_FPS
+                    else:
+                        # Fallback: treat as generic series if you want
+                        discharge_cfs = val  # or drop this entirely
 
+            # Stage
             if st_col is not None:
                 val = df_local.at[ts, st_col]
                 if pd.notna(val):
                     stage_val = float(val)
 
-            stage_ft = stage_m = None
             if stage_val is not None:
                 if args.stage_code == "00065":   # feet
                     stage_ft = stage_val
@@ -149,19 +168,21 @@ def main():
                     stage_m  = stage_val
                     stage_ft = stage_val / FT_TO_M
 
-            discharge_cumecs = discharge_cfs * CFS_TO_CUMECS if discharge_cfs is not None else None
-
             # Only write a row if at least one series has a value
-            if (discharge_cfs is not None) or (stage_val is not None):
+            if any(v is not None for v in (discharge_cfs, discharge_cumecs,
+                                           velocity_mps, stage_val)):
                 rows.append({
-                    "timestamp": ts.strftime(TS_FMT),  # localized to args.tz, no timezone suffix
+                    "timestamp": ts.strftime(TS_FMT),
                     "site_no": site,
                     "site_name": name_map.get(site, ""),
                     "discharge_cfs": f"{discharge_cfs:.3f}" if discharge_cfs is not None else "",
                     "discharge_cumecs": f"{discharge_cumecs:.6f}" if discharge_cumecs is not None else "",
+                    "velocity_mps": f"{velocity_mps:.3f}" if velocity_mps is not None else "",
+                    "velocity_fps": f"{velocity_fps:.3f}" if velocity_fps is not None else "",
                     "stage_ft": f"{stage_ft:.3f}" if stage_ft is not None else "",
                     "stage_m": f"{stage_m:.3f}" if stage_m is not None else "",
                 })
+
 
         if not rows:
             print(f"[{site}] No valid observations after filtering.")
@@ -179,9 +200,11 @@ def main():
                 fieldnames=[
                     "timestamp","site_no","site_name",
                     "discharge_cfs","discharge_cumecs",
+                    "velocity_mps","velocity_fps",
                     "stage_ft","stage_m"
                 ]
             )
+
             w.writeheader()
             for r in rows:
                 w.writerow(r)
