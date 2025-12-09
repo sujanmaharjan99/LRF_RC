@@ -281,7 +281,76 @@ def plot_all_stations_seasonal_kge(combined_df, out_dir):
 
     print(f"\nSaved multi-station plots to:\n  {dry_out}\n  {wet_out}")
 
+def plot_aggregate_seasonal_kge(combined_df, out_dir):
+    """
+    Plot aggregated KGE vs lead time over all stations:
+    - One figure for dry season (mean ± std across stations)
+    - One figure for wet season (mean ± std across stations)
 
+    Parameters
+    ----------
+    combined_df : pandas.DataFrame
+        Output from concatenating all per-station KGE tables.
+        Must contain columns:
+            - 'lead_days'
+            - 'KGE_dry'
+            - 'KGE_wet'
+    out_dir : str or Path
+        Directory where the figures will be saved.
+    """
+    out_dir = Path(out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    # Group by lead time
+    grouped = combined_df.groupby("lead_days")
+
+    # Dry season stats
+    dry_mean = grouped["KGE_dry"].mean()
+    dry_std = grouped["KGE_dry"].std()
+
+    # Wet season stats
+    wet_mean = grouped["KGE_wet"].mean()
+    wet_std = grouped["KGE_wet"].std()
+
+    # Convert index to ndarray for plotting
+    lead_days = dry_mean.index.values
+
+    # DRY SEASON AGGREGATE PLOT
+    plt.figure(figsize=(8, 5))
+    plt.plot(lead_days, dry_mean.values, marker="o", label="Mean KGE (dry)")
+    # Shaded variability band
+    dry_upper = (dry_mean + dry_std).clip(upper=1.0)
+    dry_lower = (dry_mean - dry_std).clip(lower=0.0)
+    plt.fill_between(lead_days, dry_lower.values, dry_upper.values, alpha=0.2, label="±1 std dev")
+    plt.xlabel("Lead time (days)")
+    plt.ylabel("KGE")
+    plt.title("Aggregate dry season KGE (all stations)")
+    plt.ylim(0.0, 1.0)
+    plt.grid(True)
+    plt.legend()
+    plt.tight_layout()
+    dry_out = out_dir / "AllStations_KGE_dry_aggregate.png"
+    plt.savefig(dry_out, dpi=200)
+    plt.close()
+
+    # WET SEASON AGGREGATE PLOT
+    plt.figure(figsize=(8, 5))
+    plt.plot(lead_days, wet_mean.values, marker="o", label="Mean KGE (wet)")
+    wet_upper = (wet_mean + wet_std).clip(upper=1.0)
+    wet_lower = (wet_mean - wet_std).clip(lower=0.0)
+    plt.fill_between(lead_days, wet_lower.values, wet_upper.values, alpha=0.2, label="±1 std dev")
+    plt.xlabel("Lead time (days)")
+    plt.ylabel("KGE")
+    plt.title("Aggregate wet season KGE (all stations)")
+    plt.ylim(0.0, 1.0)
+    plt.grid(True)
+    plt.legend()
+    plt.tight_layout()
+    wet_out = out_dir / "AllStations_KGE_wet_aggregate.png"
+    plt.savefig(wet_out, dpi=200)
+    plt.close()
+
+    print(f"\nSaved aggregate KGE plots to:\n  {dry_out}\n  {wet_out}")
 # =========================
 #  Main driver
 # =========================
@@ -349,5 +418,6 @@ if __name__ == "__main__":
 
         # Plots for all stations together (dry and wet)
         plot_all_stations_seasonal_kge(combined, PLOT_DIR)
+        plot_aggregate_seasonal_kge(combined, PLOT_DIR)    
     else:
         print("\nNo stations processed.")
