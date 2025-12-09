@@ -209,7 +209,7 @@ def plot_station_seasonal_kge(kge_df, station_name, out_dir):
 
     # Dry
     plt.figure(figsize=(7, 4))
-    plt.plot(kge_df["lead_days"], kge_df["KGE_dry"], marker="o")
+    plt.plot(kge_df["lead_days"], kge_df["KGE_dry"])
     plt.xlabel("Lead time (days)")
     plt.ylabel("KGE")
     plt.title(f"{station_name} - Dry season")
@@ -222,7 +222,7 @@ def plot_station_seasonal_kge(kge_df, station_name, out_dir):
 
     # Wet
     plt.figure(figsize=(7, 4))
-    plt.plot(kge_df["lead_days"], kge_df["KGE_wet"], marker="o")
+    plt.plot(kge_df["lead_days"], kge_df["KGE_wet"])
     plt.xlabel("Lead time (days)")
     plt.ylabel("KGE")
     plt.title(f"{station_name} - Wet season")
@@ -280,6 +280,108 @@ def plot_all_stations_seasonal_kge(combined_df, out_dir):
     plt.close()
 
     print(f"\nSaved multi-station plots to:\n  {dry_out}\n  {wet_out}")
+def plot_aggregate_overall_kge(combined_df, out_dir):
+    """
+    Plot aggregated overall KGE vs lead time over all stations (no wet/dry split).
+    Shows mean ± std across stations.
+
+    Parameters
+    ----------
+    combined_df : pandas.DataFrame
+        Must contain columns:
+            - 'lead_days'
+            - 'KGE_all'
+    out_dir : str or Path
+        Directory where the figure will be saved.
+    """
+    out_dir = Path(out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    # Group by lead time
+    grouped = combined_df.groupby("lead_days")
+
+    kge_mean = grouped["KGE_all"].mean()
+
+    lead_days = kge_mean.index.values
+
+    plt.figure(figsize=(8, 5))
+
+    # Mean line
+    plt.plot(lead_days, kge_mean.values, label="Mean KGE (all stations)")
+
+    plt.xlabel("Lead time (days)")
+    plt.ylabel("KGE")
+    plt.title("Aggregate overall KGE (all stations)")
+    plt.ylim(0.0, 1.0)
+    plt.grid(True)
+    plt.legend()
+    plt.tight_layout()
+
+    out_path = out_dir / "AllStations_KGE_overall_aggregate.png"
+    plt.savefig(out_path, dpi=200)
+    plt.close()
+
+    print(f"\nSaved overall aggregate KGE plot to:\n  {out_path}")
+def plot_aggregate_overall_kge_by_year(combined_df, out_dir, years=None):
+    """
+    Plot aggregated overall KGE vs lead time for multiple years (no seasons).
+
+    For each year, the function:
+      - aggregates KGE_all across stations for each lead_days (mean)
+      - plots one line per year in a single figure
+
+    Parameters
+    ----------
+    combined_df : pandas.DataFrame
+        Must contain columns:
+            - 'year'      (int, e.g. 2019)
+            - 'lead_days'
+            - 'KGE_all'
+        Each row should represent one station, one lead, one year.
+    out_dir : str or Path
+        Directory where the figure will be saved.
+    years : list of int, optional
+        List of years to plot. If None, defaults to [2019, 2020, 2021, 2022, 2023, 2024]
+        and uses only those that are present in the DataFrame.
+    """
+    out_dir = Path(out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    if "year" not in combined_df.columns:
+        raise ValueError("combined_df must contain a 'year' column to plot KGE by year.")
+
+    if years is None:
+        years = [2019, 2020, 2021, 2022, 2023, 2024]
+
+    plt.figure(figsize=(9, 5))
+
+    for yr in years:
+        sub = combined_df[combined_df["year"] == yr]
+        if sub.empty:
+            # Skip years that are not present in the data
+            continue
+
+        # Aggregate across stations for this year and lead time
+        grouped = sub.groupby("lead_days")["KGE_all"].mean().sort_index()
+
+        lead_days = grouped.index.values
+        kge_mean = grouped.values
+
+        plt.plot(lead_days, kge_mean, label=str(yr))
+
+    plt.xlabel("Lead time (days)")
+    plt.ylabel("KGE")
+    plt.title("Aggregate overall KGE by year (all stations)")
+    plt.ylim(0.0, 1.0)
+    plt.grid(True)
+    plt.legend(title="Year")
+    plt.tight_layout()
+
+    out_path = out_dir / "AllStations_KGE_overall_by_year.png"
+    plt.savefig(out_path, dpi=200)
+    plt.close()
+
+    print(f"\nSaved overall aggregate KGE-by-year plot to:\n  {out_path}")
 
 def plot_aggregate_seasonal_kge(combined_df, out_dir):
     """
@@ -317,11 +419,7 @@ def plot_aggregate_seasonal_kge(combined_df, out_dir):
 
     # DRY SEASON AGGREGATE PLOT
     plt.figure(figsize=(8, 5))
-    plt.plot(lead_days, dry_mean.values, marker="o", label="Mean KGE (dry)")
-    # Shaded variability band
-    dry_upper = (dry_mean + dry_std).clip(upper=1.0)
-    dry_lower = (dry_mean - dry_std).clip(lower=0.0)
-    plt.fill_between(lead_days, dry_lower.values, dry_upper.values, alpha=0.2, label="±1 std dev")
+    plt.plot(lead_days, dry_mean.values, label="Mean KGE (dry)")
     plt.xlabel("Lead time (days)")
     plt.ylabel("KGE")
     plt.title("Aggregate dry season KGE (all stations)")
@@ -335,10 +433,7 @@ def plot_aggregate_seasonal_kge(combined_df, out_dir):
 
     # WET SEASON AGGREGATE PLOT
     plt.figure(figsize=(8, 5))
-    plt.plot(lead_days, wet_mean.values, marker="o", label="Mean KGE (wet)")
-    wet_upper = (wet_mean + wet_std).clip(upper=1.0)
-    wet_lower = (wet_mean - wet_std).clip(lower=0.0)
-    plt.fill_between(lead_days, wet_lower.values, wet_upper.values, alpha=0.2, label="±1 std dev")
+    plt.plot(lead_days, wet_mean.values, label="Mean KGE (wet)")
     plt.xlabel("Lead time (days)")
     plt.ylabel("KGE")
     plt.title("Aggregate wet season KGE (all stations)")
@@ -419,5 +514,7 @@ if __name__ == "__main__":
         # Plots for all stations together (dry and wet)
         plot_all_stations_seasonal_kge(combined, PLOT_DIR)
         plot_aggregate_seasonal_kge(combined, PLOT_DIR)    
+        plot_aggregate_overall_kge(combined, PLOT_DIR)
+        plot_aggregate_overall_kge_by_year(combined, PLOT_DIR)
     else:
         print("\nNo stations processed.")
