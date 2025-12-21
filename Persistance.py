@@ -258,14 +258,14 @@ def plot_kge(station_key: str, df: pd.DataFrame, out_dir: Path) -> None:
             plt.plot(x, df[col].values, linewidth=1, label=member)
 
     # lead-dependent persistence
-    plt.plot(x, df["KGE_persistence_temporal"].values, linewidth=1, label="Temporal persistence (down lag=lead)")
-    plt.plot(x, df["KGE_persistence_spatial"].values,  linewidth=1, label="Spatial persistence (up lag=lead)")
+    plt.plot(x, df["KGE_persistence_temporal"].values, linewidth=1, label="Temporal persistence")
+    plt.plot(x, df["KGE_persistence_spatial"].values,  linewidth=1, label="Spatial persistence")
 
     plt.xlabel("Lead time (days)")
     plt.ylabel("KGE")
     plt.title(f"{station_key}: KGE vs Lead Time")
     plt.grid(True, which="both", linestyle=":", linewidth=0.7)
-    plt.ylim(-1.0, 1.0)
+    plt.ylim(0.0, 1.0)
     plt.legend()
 
     out_path = out_dir / "kge_vs_leadtime.png"

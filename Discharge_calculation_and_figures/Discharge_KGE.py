@@ -39,7 +39,7 @@ def season_from_month(m):
     """
     if m in [ 7, 8,9, 10, 11, 12, 1, 2,3]:
         return "dry"
-    elif m in [ 4, 5, 6]:
+    elif m in [ 4,5,6]:
         return "wet"
     else:
         return None
@@ -383,6 +383,183 @@ def plot_aggregate_overall_kge_by_year(combined_df, out_dir, years=None):
 
     print(f"\nSaved overall aggregate KGE-by-year plot to:\n  {out_path}")
 
+def compute_kge_months_years_for_station(
+    station_name,
+    nwm_station_dir,
+    usgs_csv,
+    lead_times,
+    months=None,
+    years=None,
+    time_col_nwm="time",
+    flow_col_nwm="streamflow",
+    time_col_usgs="timestamp",
+    flow_col_usgs="discharge_cumecs",
+):
+    """
+    Compute KGE vs lead time for a station, filtered by selected months and/or years.
+
+    Parameters
+    ----------
+    months : int or list[int] or None
+        Months to include (1-12). None means all months.
+    years : int or list[int] or None
+        Years to include (e.g. 2021). None means all years.
+    """
+    # Normalize months/years inputs
+    if months is None:
+        months_list = None
+    else:
+        months_list = [months] if isinstance(months, int) else list(months)
+        months_list = sorted(set(months_list))
+
+    if years is None:
+        years_list = None
+    else:
+        years_list = [years] if isinstance(years, int) else list(years)
+        years_list = sorted(set(years_list))
+
+    usgs = load_usgs_timeseries(usgs_csv, time_col=time_col_usgs, discharge_col=flow_col_usgs)
+
+    results = []
+    for lead in lead_times:
+        nwm = load_nwm_timeseries_for_lead(
+            nwm_station_dir,
+            lead,
+            time_col=time_col_nwm,
+            flow_col=flow_col_nwm,
+        )
+
+        base_row = {
+            "station": station_name,
+            "lead_hours": lead,
+            "lead_days": lead / 24.0,
+            "months": "all" if months_list is None else ",".join(map(str, months_list)),
+            "years": "all" if years_list is None else ",".join(map(str, years_list)),
+        }
+
+        if nwm is None:
+            results.append({**base_row, "KGE": np.nan, "n_pairs": 0})
+            continue
+
+        merged = pd.merge(usgs, nwm, on="time", how="inner")
+        if merged.empty:
+            results.append({**base_row, "KGE": np.nan, "n_pairs": 0})
+            continue
+
+        # Apply filters
+        if months_list is not None:
+            merged = merged[merged["time"].dt.month.isin(months_list)]
+        if years_list is not None:
+            merged = merged[merged["time"].dt.year.isin(years_list)]
+
+        n_pairs = len(merged)
+        kge = compute_kge(merged["sim"].values, merged["obs"].values) if n_pairs >= 2 else np.nan
+
+        results.append({**base_row, "KGE": kge, "n_pairs": n_pairs})
+
+    return pd.DataFrame(results).sort_values("lead_hours")
+
+def plot_station_kge_for_months_years(
+    kge_df,
+    station_name,
+    months=None,
+    years=None,
+    out_dir=None,
+    ylim=(-1.0, 1.0),
+):
+    """
+    Plot KGE vs lead time for a station given month/year filters.
+    """
+    # Make nice labels
+    if months is None:
+        months_label = "all_months"
+        title_months = "All months"
+    else:
+        mlist = [months] if isinstance(months, int) else sorted(set(months))
+        months_label = "m" + "-".join(map(str, mlist))
+        title_months = f"Months {mlist}"
+
+    if years is None:
+        years_label = "all_years"
+        title_years = "All years"
+    else:
+        ylist = [years] if isinstance(years, int) else sorted(set(years))
+        years_label = "y" + "-".join(map(str, ylist))
+        title_years = f"Years {ylist}"
+
+    plt.figure(figsize=(7, 4))
+    plt.plot(kge_df["lead_days"], kge_df["KGE"])
+    plt.xlabel("Lead time (days)")
+    plt.ylabel("KGE")
+    plt.title(f"{station_name} - {title_months}, {title_years}")
+    plt.ylim(*ylim)
+    plt.grid(True)
+    plt.tight_layout()
+
+    if out_dir is not None:
+        out_dir = Path(out_dir)
+        out_dir.mkdir(parents=True, exist_ok=True)
+        out_path = out_dir / f"{station_name}_KGE_{months_label}_{years_label}.png"
+        plt.savefig(out_path, dpi=200)
+        plt.close()
+        print(f"Saved plot to: {out_path}")
+        return out_path
+
+    plt.show()
+    return None
+
+def run_single_station_month_year(
+    station_name,
+    nwm_base_dir,
+    usgs_dir,
+    lead_times,
+    months,
+    years,
+    plot_dir,
+    table_dir=None,
+):
+    station_dir = Path(nwm_base_dir) / station_name
+
+    pattern = str(Path(usgs_dir) / f"{station_name}_*.csv")
+    matches = glob.glob(pattern)
+    if not matches:
+        raise FileNotFoundError(f"No USGS file found for {station_name} (pattern: {pattern})")
+
+    usgs_csv = matches[0]
+
+    print(f"\n=== Single station run ===")
+    print(f"Station: {station_name}")
+    print(f"NWM dir: {station_dir}")
+    print(f"USGS file: {usgs_csv}")
+    print(f"Months: {months}, Years: {years}")
+
+    kge_m_y = compute_kge_months_years_for_station(
+        station_name=station_name,
+        nwm_station_dir=station_dir,
+        usgs_csv=usgs_csv,
+        lead_times=lead_times,
+        months=months,
+        years=years,
+    )
+
+    # Optional save table
+    if table_dir is not None:
+        table_dir = Path(table_dir)
+        table_dir.mkdir(parents=True, exist_ok=True)
+        out_csv = table_dir / f"{station_name}_KGE_m{'-'.join(map(str, months))}_y{years}.csv"
+        kge_m_y.to_csv(out_csv, index=False)
+        print(f"Saved table: {out_csv}")
+
+    # Plot
+    plot_station_kge_for_months_years(
+        kge_m_y,
+        station_name,
+        months=months,
+        years=years,
+        out_dir=plot_dir,
+    )
+
+
 def plot_aggregate_seasonal_kge(combined_df, out_dir):
     """
     Plot aggregated KGE vs lead time over all stations:
@@ -451,36 +628,48 @@ def plot_aggregate_seasonal_kge(combined_df, out_dir):
 # =========================
 
 if __name__ == "__main__":
-    # Base paths
-    NWM_BASE_DIR = Path("/media/12TB/Sujan/NWM/Csv")
-    USGS_DIR = Path("/media/12TB/Sujan/NWM/USGS_data")
-
-    # Lead times in hours (6, 12, ..., 720)
+    NWM_BASE_DIR = Path("/mnt/12TB/Sujan/Csv/")
+    USGS_DIR = Path("/mnt/12TB/Sujan/USGS_data/")
     LEAD_TIMES = range(6, 721, 6)
 
-    # Output locations
     OUTPUT_TABLE_DIR = Path("./kge_outputs")
     OUTPUT_TABLE_DIR.mkdir(exist_ok=True, parents=True)
-    PLOT_DIR = Path("./kge_plots")
 
+    PLOT_DIR = Path("./kge_plots")
+    PLOT_DIR.mkdir(exist_ok=True, parents=True)
+
+    # ----------------------------
+    # 1) Quick single-station plot
+    # ----------------------------
+    run_single_station_month_year(
+        station_name="01_Rulo",
+        nwm_base_dir=NWM_BASE_DIR,
+        usgs_dir=USGS_DIR,
+        lead_times=LEAD_TIMES,
+        months=[4],     # April
+        years=2024,     # year filter
+        plot_dir=PLOT_DIR,
+        table_dir=OUTPUT_TABLE_DIR,  # optional, set to None if you don't want csv
+    )
+
+    # -----------------------------------
+    # 2) Continue with your existing loop
+    # -----------------------------------
     all_stations_results = []
 
-    # Loop over station folders in NWM
     for station_dir in sorted(NWM_BASE_DIR.iterdir()):
         if not station_dir.is_dir():
             continue
 
-        station_name = station_dir.name  # e.g. "01_Rulo"
+        station_name = station_dir.name
 
-        # Match USGS file: <station_name>_*.csv
         pattern = str(USGS_DIR / f"{station_name}_*.csv")
         matches = glob.glob(pattern)
-
         if not matches:
             print(f"\nNo USGS file found for station {station_name} (pattern {pattern}), skipping.")
             continue
 
-        usgs_csv = matches[0]  # if multiple, take first
+        usgs_csv = matches[0]
         print(f"\nMatched station {station_name}: USGS file {usgs_csv}")
 
         station_kge = compute_kge_for_station(
@@ -494,26 +683,22 @@ if __name__ == "__main__":
             flow_col_usgs="discharge_cumecs",
         )
 
-        # Save per-station CSV
         out_csv = OUTPUT_TABLE_DIR / f"{station_name}_KGE_seasonal.csv"
         station_kge.to_csv(out_csv, index=False)
         print(f"  Saved station KGE table to {out_csv}")
 
-        # Plots (dry and wet separately)
         plot_station_seasonal_kge(station_kge, station_name, PLOT_DIR)
 
         all_stations_results.append(station_kge)
 
-    # Save combined table
     if all_stations_results:
         combined = pd.concat(all_stations_results, ignore_index=True)
         combined_csv = OUTPUT_TABLE_DIR / "KGE_seasonal_all_stations.csv"
         combined.to_csv(combined_csv, index=False)
         print(f"\nSaved combined KGE table for all stations to {combined_csv}")
 
-        # Plots for all stations together (dry and wet)
         plot_all_stations_seasonal_kge(combined, PLOT_DIR)
-        plot_aggregate_seasonal_kge(combined, PLOT_DIR)    
+        plot_aggregate_seasonal_kge(combined, PLOT_DIR)
         plot_aggregate_overall_kge(combined, PLOT_DIR)
         plot_aggregate_overall_kge_by_year(combined, PLOT_DIR)
     else:
